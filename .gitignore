@@ -1,0 +1,27 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# Dati di runtime: mai nel repo
+data/
+out/
+config/config.yaml
+var/
+*.db
+*.db-wal
+*.db-shm
+
+# Credenziali
+.env
+.vault_pw
+*.secret
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store

@@ -1,0 +1,104 @@
+# Sentinel Digest - configurazione di esempio
+#
+# ENDPOINT VERIFICATI: ogni URL qui sotto è stato testato e risponde.
+# Se aggiungi una fonte, verificala prima con:
+#   sentinel-digest -c config/config.yaml test
+
+profile: bandi-pmi
+
+base_url: "https://sentinel.example.it"
+
+store:
+  path: data/bandi-pmi.db
+
+# --- fonti ---------------------------------------------------------------
+sources:
+  # AGID - Agenzia per l'Italia Digitale: feed RSS ufficiale (verificato 2026-09)
+  - name: "AGID - Notizie e avvisi"
+    kind: rss
+    url: "https://www.agid.gov.it/it/rss.xml"
+    region: "Italia"
+    tags: ["digitale", "pa"]
+    limit: 50
+
+  # ANSA Economia (verificato)
+  - name: "ANSA Economia"
+    kind: rss
+    url: "https://www.ansa.it/sito/notizie/economia/economia_rss.xml"
+    region: "Italia"
+    tags: ["economia"]
+    limit: 50
+
+  # Il Sole 24 Ore - Italia (verificato)
+  - name: "Il Sole 24 Ore - Italia"
+    kind: rss
+    url: "https://www.ilsole24ore.com/rss/italia.xml"
+    region: "Italia"
+    tags: ["economia"]
+    limit: 50
+
+  # --- fonti HTML (per portali che non espongono RSS) --------------------
+  # Molte PA pubblicano i bandi solo come pagine indice. Esempio:
+  # - name: "Comune - Bandi e avvisi"
+  #   kind: html
+  #   url: "https://www.example-comune.it/it/bandi"
+  #   base_url: "https://www.example-comune.it"
+  #   limit: 40
+  #
+  # Con regex (più preciso su liste strutturate):
+  # - name: "Portale gare"
+  #   kind: html
+  #   url: "https://example.gare.it/bandi"
+  #   item_pattern: '<a[^>]+href="(?P<url>[^"]+)"[^>]*>(?P<title>[^<]{15,200})</a>'
+
+# --- filtro --------------------------------------------------------------
+filter:
+  # "any" = basta una keyword, "all" = tutte presenti
+  include_logic: any
+  include:
+    - "bando"
+    - "avviso pubblico"
+    - "contributo"
+    - "incentivo"
+    - "finanziamento"
+    - "gara"
+    - "appalto"
+    - "manifestazione di interesse"
+    - "digitalizzazione"
+    - "PNRR"
+  exclude:
+    - "graduatoria"
+    - "rettifica"
+    - "proroga termini"
+  # pesi extra: alzano il punteggio (usato per ordinare i risultati)
+  weights:
+    "contributo": 2.0
+    "finanziamento": 2.0
+    "bandi": 1.5
+  max_age_days: 45
+  min_score: 1
+
+digest:
+  max_items: 40
+  send_empty: false
+
+# --- notifica ------------------------------------------------------------
+notify:
+  - kind: folder
+    path: out
+
+  # Email (SMTP). Aruba: host smtps.aruba.it, port 465, tls ssl.
+  # - kind: smtp
+  #   host: smtps.example.it
+  #   port: 465
+  #   tls: ssl
+  #   user: "digest@example.it"
+  #   password: "${SENTINEL_SMTP_PASSWORD}"
+  #   from: "digest@example.it"
+  #   to: ["cliente@example.it"]
+
+  # Telegram: bot con @BotFather, token nell'URL via variabile d'ambiente.
+  # - kind: webhook
+  #   format: telegram
+  #   url: "https://api.telegram.org/bot${SENTINEL_TG_TOKEN}/sendMessage"
+  #   chat_id: "123456789"

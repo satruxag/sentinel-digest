@@ -1,0 +1,23 @@
+services:
+  sentinel:
+    build: .
+    image: sentinel-digest:latest
+    container_name: sentinel-digest
+    restart: unless-stopped
+    environment:
+      TZ: Europe/Rome
+      # Le credenziali restano fuori dal file di config: la config usa ${VAR}
+      # SENTINEL_SMTP_PASSWORD: ${SENTINEL_SMTP_PASSWORD:-}
+      # SENTINEL_TG_TOKEN: ${SENTINEL_TG_TOKEN:-}
+    volumes:
+      - ./config:/app/config:ro      # config.yaml (sola lettura)
+      - ./data:/app/data             # SQLite: dedup e storico
+      - ./out:/app/out               # digest generati (HTML/TXT)
+    # Esecuzione una volta al giorno alle 07:00. Commenta se usi cron esterno.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          sentinel-digest -c /app/config/config.yaml run || echo "run fallita, riprovo domani"
+          sleep 86400
+        done
