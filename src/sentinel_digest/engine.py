@@ -35,12 +35,25 @@ class RunResult:
         )
 
 
+class ConfigNotFound(FileNotFoundError):
+    """Config assente: errore con istruzioni, non un traceback."""
+
+
 def load_config(path: str | Path) -> dict:
     """YAML se disponibile, altrimenti JSON. Espande ${VAR} dall'ambiente."""
     from .envsubst import expand_env
 
     p = Path(path)
-    text = p.read_text(encoding="utf-8")
+    try:
+        text = p.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        raise ConfigNotFound(
+            f"config non trovata: {p}\n"
+            f"  creala dall'esempio (config/ non e' nel repo, il clone non la contiene):\n"
+            f"    mkdir -p {p.parent}\n"
+            f"    cp examples/config.example.yaml {p}\n"
+            f"  oppure indica un altro file con: sentinel-digest -c PERCORSO ..."
+        ) from None
     try:
         import yaml  # type: ignore
 

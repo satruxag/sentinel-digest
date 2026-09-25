@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
-from .engine import load_config, run
+from .engine import ConfigNotFound, load_config, run
 from .sources import build_source
 from .storage import Store
 
@@ -164,7 +164,12 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     _setup_log(args.verbose)
-    return args.func(args)
+    try:
+        return args.func(args)
+    except ConfigNotFound as exc:
+        # Errore dell'utente, non crash: messaggio leggibile senza traceback.
+        print(f"errore: {exc}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

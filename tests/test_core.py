@@ -135,3 +135,28 @@ def test_export_json(tmp_path):
     n = s.export_json(tmp_path / "e.json")
     assert n == 1 and (tmp_path / "e.json").exists()
     s.close()
+
+# --- config mancante: errore leggibile, non traceback ---------------------
+
+
+def test_load_config_missing_gives_actionable_error(tmp_path):
+    """Regressione: il clone non contiene config/, quindi il primo comando
+    dell'utente colpiva un FileNotFoundError con traceback."""
+    from sentinel_digest.engine import ConfigNotFound, load_config
+
+    missing = tmp_path / "config" / "config.yaml"
+    with pytest.raises(ConfigNotFound) as exc:
+        load_config(missing)
+    msg = str(exc.value)
+    assert "config.example.yaml" in msg, "il messaggio deve dire dove prendere l'esempio"
+    assert "mkdir" in msg, "il messaggio deve dare il comando risolutivo"
+
+
+def test_cli_missing_config_exits_2_without_traceback(tmp_path, capsys):
+    from sentinel_digest.cli import main
+
+    rc = main(["-c", str(tmp_path / "nope" / "config.yaml"), "doctor"])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "config.example.yaml" in err
+    assert "Traceback" not in err

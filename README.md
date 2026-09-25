@@ -33,6 +33,7 @@ Sentinel Digest gira **sulla tua macchina**, filtra con le tue regole, e costa z
 git clone https://github.com/example/sentinel-digest.git
 cd sentinel-digest
 
+mkdir -p config                    # il clone non include config/ (non è nel repo)
 cp examples/config.example.yaml config/config.yaml
 $EDITOR config/config.yaml          # metti le tue keyword
 
