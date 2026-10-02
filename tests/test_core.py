@@ -160,3 +160,47 @@ def test_cli_missing_config_exits_2_without_traceback(tmp_path, capsys):
     err = capsys.readouterr().err
     assert "config.example.yaml" in err
     assert "Traceback" not in err
+
+
+# --- doctor: notifier -----------------------------------------------------
+
+def _doctor_on(tmp_path, notify):
+    """Scrive una config minima e lancia doctor, ritornando (rc, stdout)."""
+    import json
+
+    from sentinel_digest.cli import main
+
+    cfg = {
+        "profile": "t",
+        "store": {"path": str(tmp_path / "data" / "t.db")},
+        "sources": [],
+        "notify": notify,
+    }
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps(cfg), encoding="utf-8")
+    return main(["-c", str(path), "doctor"])
+
+
+def test_doctor_flags_unknown_notifier_kind(tmp_path, capsys):
+    """Regressione: un refuso nel kind ('telegran') passava come [OK].
+    La diagnostica deve accorgersene subito, prima della run."""
+    rc = _doctor_on(tmp_path, [{"kind": "telegran", "url": "https://x.test/h"}])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "[FAIL] notifier telegran" in out
+
+
+def test_doctor_rejects_typo_notifier_without_raising(tmp_path, capsys):
+    rc = _doctor_on(tmp_path, [{"kind": "telegran", "url": "https://x.test/h"}])
+    out = capsys.readouterr().out
+    assert rc == 1, "un notifier sconosciuto deve rendere la diagnosi negativa"
+    assert "[FAIL] notifier telegran" in out, "deve nominare il kind sbagliato"
+    assert "[OK  ] notifier telegran" not in out, "non deve dichiararlo valido"
+
+
+def test_doctor_typo_message_lists_valid_kinds_plainly(tmp_path, capsys):
+    """Il messaggio deve elencare i kind in forma leggibile, senza repr Python."""
+    _doctor_on(tmp_path, [{"kind": "emaill"}])
+    out = capsys.readouterr().out
+    assert "folder" in out and "smtp" in out and "webhook" in out
+    assert "['" not in out, "niente repr di lista: l'utente finale legge questo testo"

@@ -10,6 +10,7 @@ from pathlib import Path
 
 from . import __version__
 from .engine import ConfigNotFound, load_config, run
+from .notify import check_notifier
 from .sources import build_source
 from .storage import Store
 
@@ -95,9 +96,11 @@ def cmd_doctor(args) -> int:
 
     for ncfg in config.get("notify") or []:
         kind = ncfg.get("kind")
-        missing = [k for k in {"smtp": ["host", "to"], "webhook": ["url"]}.get(kind, []) if not ncfg.get(k)]
-        if missing:
-            print(f"[FAIL] notifier {kind}: mancano {missing}")
+        # check_notifier convalida davvero la voce; prima un kind scritto male
+        # passava come [OK] e falliva solo alla run.
+        problema = check_notifier(ncfg)
+        if problema:
+            print(f"[FAIL] notifier {kind}: {problema}")
             problems += 1
         else:
             print(f"[OK  ] notifier {kind}")

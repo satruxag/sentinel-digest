@@ -148,15 +148,49 @@ NOTIFIERS = {
 }
 
 
+# Campi obbligatori per ciascun notifier: servono anche al doctor, per
+# accorgersi di una config incompleta prima della run.
+REQUIRED_FIELDS = {"smtp": ("host", "to"), "webhook": ("url",)}
+
+
+def valid_kinds() -> str:
+    """Elenco dei kind validi in forma leggibile, per i messaggi all'utente.
+
+    Non usare `sorted(NOTIFIERS)` nei messaggi: stampa la repr della lista
+    (['folder', 'smtp', ...]), che per un utente finale e' rumore.
+    """
+    return ", ".join(sorted(NOTIFIERS))
+
+
+def check_notifier(cfg: dict) -> str | None:
+    """Verifica una voce `notify` senza costruirla. Ritorna None se ok,
+    altrimenti il motivo, in italiano e gia' pronto da stampare."""
+    kind = cfg.get("kind", "stdout")
+    if kind not in NOTIFIERS:
+        suggerimento = ""
+        vicini = [k for k in NOTIFIERS if k.startswith(str(kind)[:3])]
+        if vicini:
+            suggerimento = f" - intendevi {vicini[0]!r}?"
+        return (
+            f"kind sconosciuto {kind!r}{suggerimento} "
+            f"(kind validi: {valid_kinds()})"
+        )
+    mancanti = [k for k in REQUIRED_FIELDS.get(kind, ()) if not cfg.get(k)]
+    if mancanti:
+        return f"mancano i campi obbligatori: {', '.join(mancanti)}"
+    return None
+
+
 def build_notifier(cfg: dict) -> Notifier:
     kind = cfg.get("kind", "stdout")
     cls = NOTIFIERS.get(kind)
     if cls is None:
-        raise ValueError(f"notifier sconosciuto: {kind!r} (disponibili: {sorted(NOTIFIERS)})")
+        raise ValueError(f"notifier non valido: {check_notifier(cfg)}")
     return cls(cfg)  # type: ignore[arg-type]
 
 
 __all__ = [
     "Notifier", "FolderNotifier", "StdoutNotifier", "SmtpNotifier", "WebhookNotifier",
-    "build_notifier", "render_html", "render_text", "NOTIFIERS",
+    "build_notifier", "check_notifier", "valid_kinds",
+    "render_html", "render_text", "NOTIFIERS", "REQUIRED_FIELDS",
 ]
