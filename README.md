@@ -30,7 +30,7 @@ Sentinel Digest gira **sulla tua macchina**, filtra con le tue regole, e costa z
 ### Docker (consigliata)
 
 ```bash
-git clone https://github.com/example/sentinel-digest.git
+git clone https://github.com/satruxag/sentinel-digest.git
 cd sentinel-digest
 
 mkdir -p config                    # il clone non include config/ (non è nel repo)

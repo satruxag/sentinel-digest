@@ -30,7 +30,7 @@ dev = ["pytest>=7.0", "ruff>=0.5"]
 sentinel-digest = "sentinel_digest.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/example/sentinel-digest"
+Homepage = "https://github.com/satruxag/sentinel-digest"
 
 [tool.setuptools.packages.find]
 where = ["src"]
