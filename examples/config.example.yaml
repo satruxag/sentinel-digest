@@ -13,12 +13,14 @@ store:
 
 # --- fonti ---------------------------------------------------------------
 sources:
-  # AGID - Agenzia per l'Italia Digitale: feed RSS ufficiale (verificato 2026-09)
-  - name: "AGID - Notizie e avvisi"
+  # Unioncamere - notizie per imprese e PMI (verificato con curl + parser 2026-10-23)
+  # Sostituisce AGID: dal 2026-10-23 www.agid.gov.it reindirizza tutto il sito
+  # (incluso /it/rss.xml) alla pagina di manutenzione -> HTTP 200 con HTML, non RSS.
+  - name: "Unioncamere - Imprese e PMI"
     kind: rss
-    url: "https://www.agid.gov.it/it/rss.xml"
+    url: "https://www.unioncamere.gov.it/rss"
     region: "Italia"
-    tags: ["digitale", "pa"]
+    tags: ["imprese", "pmi"]
     limit: 50
 
   # ANSA Economia (verificato)
