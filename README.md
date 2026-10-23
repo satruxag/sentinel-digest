@@ -131,13 +131,18 @@ Per le PA che non hanno RSS, usa la pagina indice:
 
 ## Fonti verificate
 
-Gli endpoint in `examples/config.example.yaml` sono testati e funzionanti:
+Gli endpoint in `examples/config.example.yaml` sono testati e funzionanti
+(ultima verifica: 23/10/2026, con `sentinel-digest test`):
 
-- **AGID** — `https://www.agid.gov.it/it/rss.xml`
+- **Unioncamere** — `https://www.unioncamere.gov.it/rss`
 - **ANSA Economia** — `https://www.ansa.it/sito/notizie/economia/economia_rss.xml`
 - **Il Sole 24 Ore** — `https://www.ilsole24ore.com/rss/italia.xml`
 
-Molti portali istituzionali hanno cambiato struttura e i vecchi feed `/rss` o `?format=feed` rispondono **404**: vanno verificati caso per caso.
+Attenzione: gli endpoint pubblici cambiano senza avviso. Il feed AGID
+(`https://www.agid.gov.it/it/rss.xml`) risponde ancora **HTTP 200 ma con una pagina HTML
+di manutenzione**, non con l'RSS: un caso da manuale di fonte che sembra viva e non lo è.
+Molti portali istituzionali hanno cambiato struttura e i vecchi feed `/rss` o `?format=feed`
+rispondono **404**: vanno verificati caso per caso.
 
 ## API Python
 

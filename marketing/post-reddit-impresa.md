@@ -10,7 +10,7 @@ Ciao. Da tempo mi capitava di scoprire bandi già chiusi, perché in Italia le i
 
 Sentinel Digest è un tool self-hosted, licenza MIT, che fa tre cose: scarica da fonti dichiarate (RSS o HTML), filtra con le tue keyword e i tuoi pesi, e manda un digest via email o Telegram. Deduplica gli avvisi con un UID stabile, così non arriva due volte la stessa cosa. Zero account, zero dati che escono dalla tua macchina, gira in Docker con un run al giorno.
 
-Onestà: è nuovo, non ha clienti, e non ha un database di bandi già pronto — sei tu a dichiarare le fonti che ti interessano (con una config di esempio con AGID, ANSA Economia e Il Sole 24 Ore). È utile se sai già quali portali contano per il tuo settore e vuoi smettere di controllarli a mano.
+Onestà: è nuovo, non ha clienti, e non ha un database di bandi già pronto — sei tu a dichiarare le fonti che ti interessano (con una config di esempio con Unioncamere, ANSA Economia e Il Sole 24 Ore). È utile se sai già quali portali contano per il tuo settore e vuoi smettere di controllarli a mano.
 
 Se lo provi e mi dici quali fonti mancano nella tua regione, aggiorno gli esempi. Non vendo nulla e non raccolgo iscrizioni.
 
