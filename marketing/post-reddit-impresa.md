@@ -1,5 +1,11 @@
 # Post per r/impresa e r/StartupFinanceItalia
 
+> **ATTENZIONE (2026-10-26)**: il testo sotto NON è pubblicabile come post su r/impresa.
+> La regola 3 del sub, letta su https://www.reddit.com/r/impresa/about/, vieta i post
+> pubblicitari "anche velati, copywriterosi, linkedinosi": questo lo è. Usare la versione
+> come-domanda in `canali-domanda-ita-2026-10-26.md` §5. Il testo resta qui solo per
+> r/StartupFinanceItalia, più tollerante, e per storia delle decisioni.
+
 Nota operativa: r/impresa e r/StartupFinanceItalia sono più piccoli e tolleranti verso i post "ho creato", ma il tono deve restare da progetto in costruzione, senza linguaggio commerciale. Un link solo, in fondo. In r/ItaliaStartups serve il permesso dei mod prima.
 
 ---

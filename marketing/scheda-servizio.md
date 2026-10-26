@@ -19,7 +19,7 @@ Consegno:
 4. Canale di notifica configurato (email SMTP o Telegram), credenziali fuori dal file di config.
 5. Una run di prova consegnata e commentata, più una pagina di istruzioni per cambiare le keyword da soli.
 
-Prezzo: 249-390 EUR, in base al numero di fonti e alla difficoltà dei portali (le PA senza RSS richiedono una regex per pagina).
+Prezzo: 249-390 EUR, in base al numero di fonti e alla difficoltà dei portali (confermato il 2026-10-26: Contributi Europa Professional sta a 249 EUR+IVA/anno, quindi un una tantum di pari ordine e' la cosa piu' facile da far accettare) (le PA senza RSS richiedono una regex per pagina).
 Tempistica: 3-5 giorni lavorativi dal ricevimento degli accessi.
 
 ## Offerta B — Digest su misura ricorrente
