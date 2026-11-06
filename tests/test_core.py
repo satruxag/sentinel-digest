@@ -204,3 +204,69 @@ def test_doctor_typo_message_lists_valid_kinds_plainly(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "folder" in out and "smtp" in out and "webhook" in out
     assert "['" not in out, "niente repr di lista: l'utente finale legge questo testo"
+
+
+# --- doctor: prova reale contro il difetto "filtrati=0" --------------------
+
+class _FakeSource:
+    """Fonte finta: evita la rete nei test del doctor."""
+
+    def __init__(self, items):
+        self._items = items
+
+    def safe_fetch(self):
+        return list(self._items)
+
+
+def _doctor_via_main(monkeypatch, tmp_path, items, filt):
+    """Lancia `doctor` dal vero (main -> cmd_doctor) su una fonte finta.
+
+    Va bene se il test tocca main: il difetto era proprio che il doctor
+    *dichiarava* TUTTO OK, quindi la regressione deve passare dalla CLI.
+    """
+    import json
+
+    from sentinel_digest import cli
+
+    monkeypatch.setattr(cli, "build_source", lambda cfg: _FakeSource(items))
+    cfg = {
+        "profile": "t",
+        "store": {"path": str(tmp_path / "data" / "t.db")},
+        "sources": [{"name": "finta", "kind": "rss"}],
+        "filter": dict(filt),
+        "notify": [{"kind": "folder", "path": str(tmp_path / "out")}],
+    }
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps(cfg), encoding="utf-8")
+    return cli.main(["-c", str(path), "doctor"])
+
+
+def test_doctor_segnala_filtro_che_non_pesca_nulla(tmp_path, monkeypatch, capsys):
+    """Regressione (difetto piu' costoso per chi installa): le fonti sono valide
+    e raggiungibili, doctor diceva TUTTO OK, e poi la run notificava zero perche'
+    nessuna keyword compariva negli item reali. Il doctor deve accorgersene."""
+
+    items = [make("Notizia sportiva"), make("Borsa in rialzo"), make("Meteo domani")]
+    rc = _doctor_via_main(monkeypatch, tmp_path, items, {"include": ["bando", "gara"], "min_score": 1})
+    out = capsys.readouterr().out
+    assert rc == 1, "filtro che non pesca nulla deve rendere la diagnosi negativa"
+    assert "TUTTO OK" not in out, "non deve dichiarare tutto a posto"
+    assert "0 passano il filtro" in out, "deve mostrare la misura reale"
+    assert "notificherebbe zero" in out, "deve spiegare la conseguenza pratica"
+
+
+def test_doctor_tace_quando_il_filtro_pesca(tmp_path, monkeypatch, capsys):
+    items = [make("Nuovo bando regionale"), make("Borsa in rialzo")]
+    rc = _doctor_via_main(monkeypatch, tmp_path, items, {"include": ["bando"], "min_score": 1})
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "1 passano il filtro" in out
+    assert "TUTTO OK" in out
+
+
+def test_doctor_fonti_vuote_avvisa_senza_fallire(tmp_path, monkeypatch, capsys):
+    """Feed morto: la run non si rompe, ma doctor deve dirlo (WARN, non FAIL)."""
+    rc = _doctor_via_main(monkeypatch, tmp_path, [], {"include": ["bando"]})
+    out = capsys.readouterr().out
+    assert rc == 0, "una fonte vuota non e' un errore di configurazione"
+    assert "nessun item scaricato" in out

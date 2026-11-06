@@ -49,7 +49,7 @@ Il container esegue la run ogni 24 ore. I digest finiscono in `./out/`.
 python3 -m venv .venv && . .venv/bin/activate
 pip install ".[yaml]"
 
-sentinel-digest -c config/config.yaml doctor   # diagnostica
+sentinel-digest -c config/config.yaml doctor   # diagnostica + prova reale del filtro
 sentinel-digest -c config/config.yaml test     # verifica le fonti
 sentinel-digest -c config/config.yaml run      # esegui
 ```
@@ -64,7 +64,7 @@ sentinel-digest -c config/config.yaml run      # esegui
 
 | Comando | Cosa fa |
 |---|---|
-| `doctor` | Diagnostica: permessi, fonti valide, notifier configurati |
+| `doctor` | Diagnostica: permessi, fonti valide, notifier configurati, **e conta quanti item del momento passano davvero il filtro** |
 | `test` | Interroga ogni fonte e mostra i primi item — **usalo prima di ogni run** |
 | `run` | Raccoglie, filtra, deduplica, notifica |
 | `run --dry-run` | Stampa il digest senza inviare né salvare stato |
@@ -129,6 +129,28 @@ Per le PA che non hanno RSS, usa la pagina indice:
 
 **Verifica sempre** con `sentinel-digest test` prima di affidarti a una fonte: un endpoint morto viene saltato senza rompere la run, ma meglio saperlo.
 
+### La trappola numero uno: fonti vive, filtro che non pesca
+
+I feed di notizie generaliste (`ANSA Economia`, `Il Sole 24 Ore`) sono ottimi
+per provare l'installazione, ma non pubblicano bandi: con le keyword di esempio
+pescano **2 item su 64**, e un `include` solo un po' piu' stretto pesca **zero**.
+In quel caso la run non da' errore: risponde `filtrati=0` e non notifica niente,
+che per chi ha appena installato e' indistinguibile da "il prodotto non funziona".
+
+Per questo `doctor` ora scarica gli item reali e conta quanti passano il filtro:
+
+```
+prova reale: 64 item scaricati adesso, 0 passano il filtro
+  include=5 exclude=1 min_score=1 max_age_days=45
+[FAIL] il filtro non pesca nessuno dei 64 item scaricati adesso: con questa
+       config la run notificherebbe zero. Rilassa le keyword di include
+       (o abbassa min_score).
+```
+
+Se il filtro pesca poco, `doctor` te lo dice prima che sia `run` a farlo.
+Per un digest di bandi vero, aggiungi fonti che pubblicano bandi
+(vedi sotto) invece di allargare le keyword a caso.
+
 ## Fonti verificate
 
 Gli endpoint in `examples/config.example.yaml` sono testati e funzionanti
@@ -137,6 +159,26 @@ Gli endpoint in `examples/config.example.yaml` sono testati e funzionanti
 - **Unioncamere** — `https://www.unioncamere.gov.it/rss`
 - **ANSA Economia** — `https://www.ansa.it/sito/notizie/economia/economia_rss.xml`
 - **Il Sole 24 Ore** — `https://www.ilsole24ore.com/rss/italia.xml`
+
+### Fonti che pubblicano bandi (non solo notizie)
+
+I tre feed sopra servono a verificare che l'installazione funzioni: sono
+notizie generaliste, non bandi. Per un digest utile aggiungi portali che
+pubblicano avvisi. Questi rispondono e hanno item correnti che parlano di
+bandi (verificati il 06/11/2026, conteggio sulla parola "bando" negli item
+del momento):
+
+- **Fondazione Cariplo** — `https://www.fondazionecariplo.it/feed` — 10 item, 8 con "bando"
+- **Fondazione con il Sud** — `https://www.fondazioneconilsud.it/rss/` — 10 item, 3 con "bando"
+- **Fondazione CRC** — `https://www.fondazionecrc.it/feed` — 12 item, 1 con "bando"
+- **Federculture** — `https://www.federculture.it/feed` — 10 item, bollettino bandi cultura
+
+Le fondazioni sono le piu' affidabili come fonte di bandi: pubblicano il
+bando come titolo, quindi il filtro lo pesca con una keyword sola.
+
+Verifica i titoli con `sentinel-digest test` prima di aggiungerli: molti
+portali PA espongono `/rss` che risponde **HTTP 200 con una pagina HTML**,
+non un feed — il parser li scarta e la fonte risulta vuota.
 
 Attenzione: gli endpoint pubblici cambiano senza avviso. Il feed AGID
 (`https://www.agid.gov.it/it/rss.xml`) risponde ancora **HTTP 200 ma con una pagina HTML

@@ -10,6 +10,7 @@ from pathlib import Path
 
 from . import __version__
 from .engine import ConfigNotFound, load_config, run
+from .filtering import KeywordFilter
 from .notify import check_notifier
 from .sources import build_source
 from .storage import Store
@@ -105,8 +106,61 @@ def cmd_doctor(args) -> int:
         else:
             print(f"[OK  ] notifier {kind}")
 
+    problems += _doctor_probe_real_items(config, sources)
     print(f"{'PROBLEMI: ' + str(problems) if problems else 'TUTTO OK'}")
     return 1 if problems else 0
+
+
+def _doctor_probe_real_items(config: dict, sources: list) -> int:
+    """Il difetto piu' costoso per chi installa: doctor dichiara TUTTO OK e poi
+    la run notifica zero perche' nessuna fonte contiene le keyword scelte.
+
+    Qui si scarica davvero, una volta, e si confronta il filtro con il testo
+    reale: misura reale al posto della dichiarazione di intenti.
+    """
+    if not sources:
+        return 0
+
+    items: list = []
+    per_source: list[tuple[str, int]] = []
+    for scfg in sources:
+        name = scfg.get("name", scfg.get("kind"))
+        try:
+            got = build_source(scfg).safe_fetch()
+        except Exception as exc:  # noqa: BLE001
+            print(f"[FAIL] fonte non interrogabile: {name}: {exc}")
+            return 1
+        per_source.append((name, len(got)))
+        items.extend(got)
+
+    for name, n in per_source:
+        if n == 0:
+            print(f"[WARN] fonte vuota: {name} (0 item adesso: feed morto o instabile)")
+
+    if not items:
+        print(
+            "[WARN] nessun item scaricato dalle fonti: la run notificherebbe zero. "
+            "Ricontrolla gli URL con 'sentinel-digest test'."
+        )
+        return 0
+
+    flt = KeywordFilter(config)
+    matches = flt.apply(items)
+    print(f"prova reale: {len(items)} item scaricati adesso, {len(matches)} passano il filtro")
+    print(
+        f"  include={len(flt.include)} exclude={len(flt.exclude)} "
+        f"min_score={flt.min_score:g} max_age_days="
+        f"{(config.get('filter') or {}).get('max_age_days', 30)}"
+    )
+
+    if not matches:
+        print(
+            f"[FAIL] il filtro non pesca nessuno dei {len(items)} item scaricati "
+            "adesso: con questa config la run notificherebbe zero. "
+            "Rilassa le keyword di include (o abbassa min_score)."
+        )
+        return 1
+    return 0
 
 
 def cmd_stats(args) -> int:
