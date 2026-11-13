@@ -181,10 +181,21 @@ def describe_failure(exc: BaseException) -> str:
             f"SMTP ha rifiutato credenziali (codice {exc.smtp_code}): "
             "controlla user e la variabile d'ambiente della password"
         )
-    if isinstance(exc, (smtplib.SMTPException, OSError)) and "SMTP" in name.upper():
-        return f"errore SMTP: {exc}"
+    # socket.gaierror e' un OSError e arrivava qui nudo ("gaierror: [Errno -2]
+    # Name or service not known"): il nome host e' sbagliato o non risolve.
+    if isinstance(exc, socket.gaierror):
+        return (
+            "il nome del server non risolve "
+            f"({exc}): controlla l'indirizzo in questa voce notify"
+        )
     if isinstance(exc, (TimeoutError, socket.timeout)):
         return "tempo scaduto nel contatto della destinazione (server lento o irraggiungibile)"
+    if isinstance(exc, ConnectionError):
+        return f"connessione rifiutata o interrotta: {exc} (host e porta giusti?)"
+    if isinstance(exc, smtplib.SMTPException):
+        return f"errore SMTP: {exc}"
+    if isinstance(exc, OSError):
+        return f"errore di rete: {exc}"
     if isinstance(exc, ValueError):
         return str(exc)
     return f"{name}: {exc}"

@@ -356,3 +356,17 @@ def test_describe_failure_traduce_i_casi_notevoli():
     auth = smtplib.SMTPAuthenticationError(535, b"bad credentials")
     assert "credenziali" in describe_failure(auth)
     assert describe_failure(TimeoutError("t")) .startswith("tempo scaduto")
+
+
+def test_describe_failure_traduce_dns_e_connessione():
+    """Caso trovato provando la fix sui server veri: un host che non risolve
+    stampava `gaierror: [Errno -2] Name or service not known`."""
+    import socket
+
+    from sentinel_digest.notify import describe_failure
+
+    dns = describe_failure(socket.gaierror(-2, "Name or service not known"))
+    assert "non risolve" in dns, "deve dire che il nome host e' il problema"
+    assert not dns.startswith("gaierror"), "non deve iniziare con il nome dell'eccezione"
+    conn = describe_failure(ConnectionRefusedError(111, "Connection refused"))
+    assert "rifiutata" in conn or "interrotta" in conn
