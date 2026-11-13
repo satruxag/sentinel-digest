@@ -4,8 +4,14 @@
 
 ```
 sentinel-digest -c config/config.yaml run
-profilo=bandi-pmi scaricati=63 filtrati=3 nuovi=2 notificati=2 errori=0
+profilo=bandi-pmi scaricati=72 filtrati=0 nuovi=0 notificati=0 errori=0
 ```
+
+(Output di una run vera sulle fonti di esempio, 13/11/2026. `filtrati=0` è
+normale con le fonti di esempio: sono notizie generaliste, non bandi — vedi
+[La trappola numero uno](#la-trappola-numero-uno-fonti-vive-filtro-che-non-pesca).
+Per una run che notifica qualcosa aggiungi le fonti della sezione
+[Fonti che pubblicano bandi](#fonti-che-pubblicano-bandi-non-solo-notizie).)
 
 ---
 
@@ -133,28 +139,32 @@ Per le PA che non hanno RSS, usa la pagina indice:
 
 I feed di notizie generaliste (`ANSA Economia`, `Il Sole 24 Ore`) sono ottimi
 per provare l'installazione, ma non pubblicano bandi: con le keyword di esempio
-pescano **2 item su 64**, e un `include` solo un po' piu' stretto pesca **zero**.
+pescano **0 item su 72** (misurato il 13/11/2026), e il conteggio dipende dai
+titoli del giorno — puo' passare da 0 a 2-3 senza che tu cambi niente.
 In quel caso la run non da' errore: risponde `filtrati=0` e non notifica niente,
 che per chi ha appena installato e' indistinguibile da "il prodotto non funziona".
 
 Per questo `doctor` ora scarica gli item reali e conta quanti passano il filtro:
 
 ```
-prova reale: 64 item scaricati adesso, 0 passano il filtro
+prova reale: 72 item scaricati adesso, 0 passano il filtro
   include=5 exclude=1 min_score=1 max_age_days=45
-[FAIL] il filtro non pesca nessuno dei 64 item scaricati adesso: con questa
+[FAIL] il filtro non pesca nessuno dei 72 item scaricati adesso: con questa
        config la run notificherebbe zero. Rilassa le keyword di include
        (o abbassa min_score).
 ```
 
-Se il filtro pesca poco, `doctor` te lo dice prima che sia `run` a farlo.
+Il caso grave — zero item pescati — `doctor` lo blocca prima che sia `run`
+a farlo. Un filtro che pesca poco (1-3 item su cento) invece **non** viene
+segnalato: `doctor` risponde `TUTTO OK`. Guarda la riga `prova reale:` e
+giudica tu se il numero ti basta.
 Per un digest di bandi vero, aggiungi fonti che pubblicano bandi
 (vedi sotto) invece di allargare le keyword a caso.
 
 ## Fonti verificate
 
 Gli endpoint in `examples/config.example.yaml` sono testati e funzionanti
-(ultima verifica: 23/10/2026, con `sentinel-digest test`):
+(ultima verifica: 13/11/2026, con `sentinel-digest test`):
 
 - **Unioncamere** — `https://www.unioncamere.gov.it/rss`
 - **ANSA Economia** — `https://www.ansa.it/sito/notizie/economia/economia_rss.xml`
@@ -165,16 +175,19 @@ Gli endpoint in `examples/config.example.yaml` sono testati e funzionanti
 I tre feed sopra servono a verificare che l'installazione funzioni: sono
 notizie generaliste, non bandi. Per un digest utile aggiungi portali che
 pubblicano avvisi. Questi rispondono e hanno item correnti che parlano di
-bandi (verificati il 06/11/2026, conteggio sulla parola "bando" negli item
-del momento):
+bandi (verificati il 13/11/2026, conteggio della parola "bando" nei *titoli*
+degli item del momento):
 
-- **Fondazione Cariplo** — `https://www.fondazionecariplo.it/feed` — 10 item, 8 con "bando"
-- **Fondazione con il Sud** — `https://www.fondazioneconilsud.it/rss/` — 10 item, 3 con "bando"
-- **Fondazione CRC** — `https://www.fondazionecrc.it/feed` — 12 item, 1 con "bando"
-- **Federculture** — `https://www.federculture.it/feed` — 10 item, bollettino bandi cultura
+- ~~Fondazione Cariplo~~ — `https://www.fondazionecariplo.it/feed` — **NON più utilizzabile**: dal
+  13/11/2026 risponde **403** con la pagina di challenge Cloudflare ("Just a moment..."), anche
+  con lo User-Agent della CLI. La fonte viene scartata senza rompere la run.
+- **Fondazione con il Sud** — `https://www.fondazioneconilsud.it/rss/` — 10 item, 2 titoli con "bando"
+- **Federculture** — `https://www.federculture.it/feed` — 10 item, 2 titoli con "bando" (bollettino bandi)
+- **Fondazione CRC** — `https://www.fondazionecrc.it/feed` — 12 item, 0 titoli con "bando": pubblica ricerca e fondi europei, non bandi
 
-Le fondazioni sono le piu' affidabili come fonte di bandi: pubblicano il
-bando come titolo, quindi il filtro lo pesca con una keyword sola.
+Verificati uno per uno il 13/11/2026. Contano solo quelli che mettono il
+bando nel titolo: con Cariplo e CRC fuori gioco, di questa lista solo
+Fondazione con il Sud e Federculture portano bandi nel titolo.
 
 Verifica i titoli con `sentinel-digest test` prima di aggiungerli: molti
 portali PA espongono `/rss` che risponde **HTTP 200 con una pagina HTML**,

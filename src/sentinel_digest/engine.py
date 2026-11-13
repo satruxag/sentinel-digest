@@ -7,9 +7,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from .filtering import Match, KeywordFilter
+from .filtering import KeywordFilter, Match
 from .models import Item
-from .notify import build_notifier, render_html, render_text
+from .notify import build_notifier, describe_failure, render_html, render_text
 from .sources import build_source
 from .storage import Store
 
@@ -130,13 +130,23 @@ def run(config: dict, only_new: bool = True, dry_run: bool = False) -> RunResult
 
         sent_ok = 0
         for ncfg in config.get("notify") or []:
+            kind = ncfg.get("kind", "stdout")
+            # Un notifier rotto non deve fermare gli altri: si annota l'errore
+            # in forma leggibile e si passa al successivo.
             try:
                 notifier = build_notifier(ncfg)
+            except Exception as exc:  # noqa: BLE001
+                motivo = describe_failure(exc)
+                res.errors.append(f"notify {kind}: {motivo}")
+                log.warning("notify %s non configurato: %s", kind, motivo)
+                continue
+            try:
                 if notifier.send(profile, to_send, generated, html, text):
                     sent_ok += 1
             except Exception as exc:  # noqa: BLE001
-                res.errors.append(f"notify {ncfg.get('kind')}: {exc}")
-                log.warning("notify %s fallito: %s", ncfg.get("kind"), exc)
+                motivo = describe_failure(exc)
+                res.errors.append(f"notify {kind}: {motivo}")
+                log.warning("notify %s fallito: %s", kind, motivo)
 
         res.sent = len(to_send) if sent_ok else 0
         for m in to_send:

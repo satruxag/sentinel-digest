@@ -270,3 +270,89 @@ def test_doctor_fonti_vuote_avvisa_senza_fallire(tmp_path, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert rc == 0, "una fonte vuota non e' un errore di configurazione"
     assert "nessun item scaricato" in out
+
+
+# --- messaggi di errore del notifier --------------------------------------
+#
+# Difetto trovato nella prova di installazione pulita (2026-11-13): con una
+# voce notify incompleta la run stampava il repr dell'eccezione — `notify smtp:
+# 'host'` — e un webhook irraggiungibile stampava `<urlopen error [Errno 111]
+# Connection refused>`. Per chi installa sono righe inutili: non dicono quale
+# campo manca ne' cosa controllare.
+
+def _err_config(tmp_path, notify: list) -> dict:
+    return {
+        "profile": "t",
+        "store": {"path": str(tmp_path / "data" / "t.db")},
+        "sources": [{"name": "finta", "kind": "rss"}],
+        "filter": {"include": ["bando"], "min_score": 1},
+        "digest": {"max_items": 5},
+        "notify": notify,
+    }
+
+
+def _run_with_items(tmp_path, monkeypatch, notify: list):
+    """Esegue engine.run() con una fonte finta che produce un match."""
+    from sentinel_digest import engine
+
+    class _Fake:
+        def safe_fetch(self):
+            return [make("Nuovo bando regionale")]
+
+    monkeypatch.setattr(engine, "build_source", lambda cfg: _Fake())
+    return engine.run(_err_config(tmp_path, notify))
+
+
+def test_errore_smtp_incompleto_e_leggibile(tmp_path, monkeypatch):
+    """Regressione: `notify smtp: 'host'` non dice niente a chi installa."""
+    res = _run_with_items(tmp_path, monkeypatch, [{"kind": "smtp"}])
+    msg = "; ".join(res.errors)
+    assert msg, "un notifier incompleto deve comparire negli errori"
+    # il vecchio messaggio era il repr dell'eccezione: `notify smtp: 'host'`
+    assert msg.strip() != "notify smtp: 'host'", "non deve restare il repr crudo del KeyError"
+    assert "campo obbligatorio" in msg, "deve dire che manca un campo"
+    assert "'host'" in msg, "deve nominare il campo mancante in modo univoco"
+    assert "kind" in msg or "voce notify" in msg, "deve dire dove intervenire"
+
+
+def test_errore_webhook_irraggiungibile_e_leggibile(tmp_path, monkeypatch):
+    """Regressione: `<urlopen error [Errno 111] Connection refused>` e' rumore."""
+    res = _run_with_items(
+        tmp_path,
+        monkeypatch,
+        [{"kind": "webhook", "format": "slack", "url": "http://127.0.0.1:1/nope"}],
+    )
+    msg = "; ".join(res.errors)
+    assert msg, "il webhook irraggiungibile deve essere segnalato"
+    assert "urlopen" not in msg, "non deve esporre gli interni di urllib"
+    assert "non raggiungibile" in msg
+    assert "notificati=0" in res.summary()
+
+
+def test_un_notifier_rotto_non_impedisce_gli_altri(tmp_path, monkeypatch):
+    """Un notifier mal configurato non deve bloccare quelli sani."""
+    out_dir = tmp_path / "out"
+    res = _run_with_items(
+        tmp_path,
+        monkeypatch,
+        [{"kind": "smtp"}, {"kind": "folder", "path": str(out_dir)}],
+    )
+    assert res.errors, "l'errore del notifier rotto va comunque riportato"
+    assert res.sent == 1, "il notifier sano deve aver notificato"
+    assert list(out_dir.glob("*-latest.html")), "il folder notifier deve aver scritto il digest"
+
+
+def test_describe_failure_traduce_i_casi_notevoli():
+    import smtplib
+    import urllib.error
+
+    from sentinel_digest.notify import describe_failure
+
+    assert "campo obbligatorio 'to'" in describe_failure(KeyError("to"))
+    http = urllib.error.HTTPError("u", 404, "Not Found", None, None)
+    assert "HTTP 404" in describe_failure(http)
+    net = urllib.error.URLError(ConnectionRefusedError(111, "Connection refused"))
+    assert "non raggiungibile" in describe_failure(net)
+    auth = smtplib.SMTPAuthenticationError(535, b"bad credentials")
+    assert "credenziali" in describe_failure(auth)
+    assert describe_failure(TimeoutError("t")) .startswith("tempo scaduto")

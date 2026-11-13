@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import logging
 import smtplib
+import socket
 import ssl
+import urllib.error
 import urllib.request
 from email.message import EmailMessage
 
@@ -150,6 +152,44 @@ NOTIFIERS = {
 
 # Campi obbligatori per ciascun notifier: servono anche al doctor, per
 # accorgersi di una config incompleta prima della run.
+
+def describe_failure(exc: BaseException) -> str:
+    """Traduce un errore tecnico in una riga utile per chi legge il log.
+
+    Nella run compaiono messaggi come `notify smtp: 'host'` (un KeyError nudo,
+    che non dice ne' cosa manca ne' dove) o `<urlopen error [Errno 111]
+    Connection refused>` (interni di urllib). Qui diventano frasi con la
+    conseguenza pratica e il campo da correggere.
+    """
+    name = type(exc).__name__
+    if isinstance(exc, KeyError):
+        campo = exc.args[0] if exc.args else "?"
+        return (
+            f"manca il campo obbligatorio {campo!r} in questa voce notify "
+            f"(obbligatori: {', '.join(REQUIRED_FIELDS.get('smtp', ())) } per smtp, "
+            f"url per webhook)"
+        )
+    if isinstance(exc, urllib.error.HTTPError):
+        return (
+            f"la destinazione ha risposto HTTP {exc.code}: "
+            "controlla l'URL del webhook e il token"
+        )
+    if isinstance(exc, urllib.error.URLError):
+        return f"destinazione non raggiungibile: {exc.reason} (URL giusto? rete raggiungibile?)"
+    if isinstance(exc, smtplib.SMTPAuthenticationError):
+        return (
+            f"SMTP ha rifiutato credenziali (codice {exc.smtp_code}): "
+            "controlla user e la variabile d'ambiente della password"
+        )
+    if isinstance(exc, (smtplib.SMTPException, OSError)) and "SMTP" in name.upper():
+        return f"errore SMTP: {exc}"
+    if isinstance(exc, (TimeoutError, socket.timeout)):
+        return "tempo scaduto nel contatto della destinazione (server lento o irraggiungibile)"
+    if isinstance(exc, ValueError):
+        return str(exc)
+    return f"{name}: {exc}"
+
+
 REQUIRED_FIELDS = {"smtp": ("host", "to"), "webhook": ("url",)}
 
 
@@ -190,7 +230,17 @@ def build_notifier(cfg: dict) -> Notifier:
 
 
 __all__ = [
-    "Notifier", "FolderNotifier", "StdoutNotifier", "SmtpNotifier", "WebhookNotifier",
-    "build_notifier", "check_notifier", "valid_kinds",
-    "render_html", "render_text", "NOTIFIERS", "REQUIRED_FIELDS",
+    "NOTIFIERS",
+    "REQUIRED_FIELDS",
+    "FolderNotifier",
+    "Notifier",
+    "SmtpNotifier",
+    "StdoutNotifier",
+    "WebhookNotifier",
+    "build_notifier",
+    "check_notifier",
+    "describe_failure",
+    "render_html",
+    "render_text",
+    "valid_kinds",
 ]
