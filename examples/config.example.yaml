@@ -90,6 +90,9 @@ notify:
     path: out
 
   # Email (SMTP). Aruba: host smtps.aruba.it, port 465, tls ssl.
+  # `tls` accetta: ssl (porta 465), starttls (587), none/plain (server SMTP
+  # locale senza cifratura, es. MailHog), auto (default: ssl su 465).
+  # Un altro valore non viene ignorato: run e doctor lo segnalano.
   # - kind: smtp
   #   host: smtps.example.it
   #   port: 465

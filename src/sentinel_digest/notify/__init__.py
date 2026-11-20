@@ -49,8 +49,22 @@ class StdoutNotifier(Notifier):
         return True
 
 
+# Valori accettati per il campo `tls`. Cambiarli significa cambiare l'API della
+# config: `_TLS_MODES` e' l'unico posto da toccare.
+_TLS_MODES = ("auto", "ssl", "starttls", "plain", "none")
+
+
 class SmtpNotifier(Notifier):
-    """SMTP con TLS implicito (465) o STARTTLS (587)."""
+    """SMTP con TLS implicito (465), STARTTLS (587), o senza cifratura.
+
+    `tls` vale `auto` (default: SSL su 465, STARTTLS altrove), `ssl`/`tls`/
+    `implicit`, `starttls`, oppure `plain`/`none` per un server che non offre
+    cifratura. Un valore non riconosciuto e' un errore subito, non un fallback
+    silenzioso su STARTTLS: prima `tls: plain` veniva ignorato e la connessione
+    cadeva comunque su STARTTLS, che su un server senza quella extension
+    rispondeva `STARTTLS extension not supported by server` senza mai nominare
+    il campo scritto male.
+    """
 
     kind = "smtp"
 
@@ -61,7 +75,20 @@ class SmtpNotifier(Notifier):
         self.password = cfg.get("password") or ""
         self.sender = cfg.get("from") or self.user
         self.to = cfg["to"] if isinstance(cfg["to"], list) else [cfg["to"]]
-        self.mode = (cfg.get("tls") or ("ssl" if self.port == 465 else "starttls")).lower()
+        # `tls` puo' arrivare da YAML scritto a mano: normalizza case e spazi
+        # (" SSL " -> ssl). Un valore vuoto o assente resta "auto".
+        grezzo = str(cfg.get("tls") or "auto").strip().lower()
+        if grezzo in ("implicit",):
+            grezzo = "ssl"
+        if grezzo == "auto":
+            grezzo = "ssl" if self.port == 465 else "starttls"
+        if grezzo not in _TLS_MODES:
+            raise ValueError(
+                f"campo 'tls' non riconosciuto: {cfg.get('tls')!r} in questa voce notify "
+                f"(valori validi: {', '.join(_TLS_MODES)}; 'none' o 'plain' = server "
+                "senza cifratura, 'ssl' = porta 465, 'starttls' = porta 587)"
+            )
+        self.mode = grezzo
         self.timeout = int(cfg.get("timeout", 30))
 
     def send(self, profile, matches, generated, html, text) -> bool:
@@ -73,16 +100,24 @@ class SmtpNotifier(Notifier):
         msg.add_alternative(html, subtype="html")
 
         ctx = ssl.create_default_context()
-        if self.mode in ("ssl", "tls", "implicit"):
+        if self.mode == "ssl":
             with smtplib.SMTP_SSL(self.host, self.port, timeout=self.timeout, context=ctx) as s:
                 if self.user:
                     s.login(self.user, self.password)
                 s.send_message(msg)
-        else:
+        elif self.mode == "starttls":
             with smtplib.SMTP(self.host, self.port, timeout=self.timeout) as s:
                 s.ehlo()
                 s.starttls(context=ctx)
                 s.ehlo()
+                if self.user:
+                    s.login(self.user, self.password)
+                s.send_message(msg)
+        else:
+            # `none`/`plain`: server che non espone cifratura (relay interno,
+            # smarthost locale). Qui NON si chiama starttls, altrimenti la
+            # scelta dell'utente non avrebbe effetto.
+            with smtplib.SMTP(self.host, self.port, timeout=self.timeout) as s:
                 if self.user:
                     s.login(self.user, self.password)
                 s.send_message(msg)

@@ -164,7 +164,7 @@ def test_cli_missing_config_exits_2_without_traceback(tmp_path, capsys):
 
 # --- doctor: notifier -----------------------------------------------------
 
-def _doctor_on(tmp_path, notify):
+def _doctor_on(tmp_path, notify, sources=None, filt=None):
     """Scrive una config minima e lancia doctor, ritornando (rc, stdout)."""
     import json
 
@@ -173,9 +173,11 @@ def _doctor_on(tmp_path, notify):
     cfg = {
         "profile": "t",
         "store": {"path": str(tmp_path / "data" / "t.db")},
-        "sources": [],
+        "sources": [] if sources is None else sources,
         "notify": notify,
     }
+    if filt is not None:
+        cfg["filter"] = filt
     path = tmp_path / "config.json"
     path.write_text(json.dumps(cfg), encoding="utf-8")
     return main(["-c", str(path), "doctor"])
@@ -370,3 +372,125 @@ def test_describe_failure_traduce_dns_e_connessione():
     assert not dns.startswith("gaierror"), "non deve iniziare con il nome dell'eccezione"
     conn = describe_failure(ConnectionRefusedError(111, "Connection refused"))
     assert "rifiutata" in conn or "interrotta" in conn
+
+
+# --- SMTP: valore di 'tls' non riconosciuto --------------------------------
+#
+# Difetto trovato il 20/11/2026 provando l'invio reale contro un server SMTP
+# locale: `tls: plain` (o qualunque valore non previsto) veniva ignorato senza
+# dire niente e la connessione cadeva comunque su STARTTLS. Un server che non
+# espone STARTTLS rispondeva `STARTTLS extension not supported by server`, un
+# messaggio che non nomina il campo che l'utente ha scritto male. Peggio: con
+# `tls: none`, scritto in YAML, PyYAML legge il valore come stringa 'none' solo
+# per errore — la parola `none` non e' quotata e il risultato dipende dal
+# parser — quindi la scelta "niente TLS" non era affidabile.
+
+def test_tls_plain_e_documentato_e_non_chiama_starttls():
+    """`tls: plain` e' un valore valido (nessuna cifratura), non un refuso."""
+    from sentinel_digest.notify import SmtpNotifier
+
+    n = SmtpNotifier({"kind": "smtp", "host": "h", "to": ["a@b"], "port": 587, "tls": "plain"})
+    assert n.mode == "plain"
+
+
+def test_tls_valore_ignoto_e_errore_leggibile_non_fallback_muto():
+    """Il difetto: un valore non previsto cadeva in silenzio su STARTTLS."""
+    import pytest
+
+    from sentinel_digest.notify import SmtpNotifier
+
+    with pytest.raises(ValueError) as exc:
+        SmtpNotifier({"kind": "smtp", "host": "h", "to": ["a@b"], "port": 587, "tls": "TLS1.2"})
+    msg = str(exc.value)
+    assert "tls" in msg, "il messaggio deve nominare il campo tls"
+    assert "TLS1.2" in msg, "deve citare il valore scritto dall'utente"
+    assert "starttls" in msg and "ssl" in msg, "deve elencare i valori validi"
+
+
+def test_tls_case_e_spazi_non_contano():
+    """`TLS: SSL  ` in un YAML scritto a mano non deve rompere la connessione."""
+    from sentinel_digest.notify import SmtpNotifier
+
+    n = SmtpNotifier({"kind": "smtp", "host": "h", "to": ["a@b"], "tls": " SSL "})
+    assert n.mode == "ssl"
+
+
+def test_smtp_senza_tls_dichiarato_non_prova_starttls(monkeypatch):
+    """`tls: none` deve davvero saltare STARTTLS (server SMTP senza extension)."""
+    from datetime import datetime, timezone
+
+    from sentinel_digest.notify import SmtpNotifier
+
+    chiamate: list[str] = []
+
+    class _FakeSMTP:
+        def __init__(self, *a, **k):
+            chiamate.append("connect")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def ehlo(self):
+            chiamate.append("ehlo")
+
+        def starttls(self, **k):
+            chiamate.append("starttls")
+
+        def login(self, *a):
+            chiamate.append("login")
+
+        def send_message(self, msg):
+            chiamate.append("send_message")
+
+    import smtplib
+
+    monkeypatch.setattr(smtplib, "SMTP", _FakeSMTP)
+    n = SmtpNotifier({"kind": "smtp", "host": "h", "to": ["a@b"], "tls": "none"})
+    assert n.send("p", [], datetime.now(timezone.utc), "<p>x</p>", "x") is True
+    assert "starttls" not in chiamate, "con tls: none non si deve chiamare STARTTLS"
+    assert "send_message" in chiamate, "il messaggio va comunque inviato"
+
+
+def test_doctor_non_dichiara_ok_un_notifier_che_non_si_costruisce(tmp_path, capsys):
+    """Regressione: `tls` scritto male rendeva doctor [OK] + exit 0.
+
+    check_notifier guardava solo la presenza dei campi obbligatori, quindi una
+    voce con `tls: require_tls` (campo presente, valore incomprensibile) passava
+    la diagnosi e falliva solo alla run. Trovato il 20/11/2026 con doctor
+    eseguito davvero mentre si provava l'invio SMTP reale.
+    """
+    rc = _doctor_on(
+        tmp_path,
+        [{"kind": "smtp", "host": "h", "to": ["a@b"], "tls": "require_tls"}],
+        sources=[{"name": "finta", "kind": "rss", "url": "https://x.test/f.xml"}],
+        filt={"include": ["bando"], "min_score": 1},
+    )
+    out = capsys.readouterr().out
+    assert rc == 1, "una voce notify che non si costruisce deve rendere la diagnosi negativa"
+    assert "[FAIL] notifier smtp" in out, "il difetto era proprio che stampava [OK]"
+    assert "tls" in out, "deve nominare il campo da correggere"
+    assert "PROBLEMI: 1" in out, "il conteggio deve riflettere il problema"
+
+
+def test_doctor_accetta_i_notifier_sani(tmp_path, capsys):
+    """Controprova: la nuova costruzione non deve produrre falsi allarmi.
+
+    Passa da un config *completo* (fonte e filtro inclusi) perche' la controprova
+    isola i notifier: se il doctor fallisse per altro, il test non proverebbe nulla.
+    """
+    rc = _doctor_on(
+        tmp_path,
+        [
+            {"kind": "folder", "path": str(tmp_path / "out")},
+            {"kind": "smtp", "host": "smtp.example.it", "to": ["a@b"], "tls": "ssl"},
+            {"kind": "webhook", "format": "telegram", "url": "https://x.test/h", "chat_id": "1"},
+        ],
+        sources=[{"name": "finta", "kind": "rss", "url": "https://x.test/f.xml"}],
+        filt={"include": ["bando"], "min_score": 1},
+    )
+    out = capsys.readouterr().out
+    assert rc == 0, f"nessuna di queste voci e' rotta: {out}"
+    assert "TUTTO OK" in out

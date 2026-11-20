@@ -49,6 +49,24 @@ docker compose logs -f
 
 Il container esegue la run ogni 24 ore. I digest finiscono in `./out/`.
 
+> **Non alternare CLI sul host e container sulla stessa `data/`.** Il database
+> SQLite appartiene all'utente che l'ha creato: la CLI locale scrive
+> `data/bandi-pmi.db` con il *tuo* utente, il container gira come UID 10001, e
+> la run dentro il container muore con
+> `sqlite3.OperationalError: attempt to write a readonly database`
+> (riprodotto il 20/11/2026). Non serve root per rimediare: esegui la pulizia
+> *come il container*, che e' l'unico ad avere i permessi sul file
+>
+> ```bash
+> docker run --rm -v "$PWD/data:/app/data" --entrypoint /bin/sh \
+>   sentinel-digest:latest -c 'rm -f /app/data/bandi-pmi.db*'
+> ```
+>
+> (verificato: dopo la rimozione la run dentro il container torna
+> `scaricati=72 ... errori=0`). Se invece vuoi usare solo Docker, non toccare
+> `data/` dal host: con il volume scritto dal solo container le run ripetute
+> funzionano.
+
 ### Senza Docker
 
 ```bash
@@ -96,6 +114,21 @@ notify:
 ```bash
 export SENTINEL_SMTP_PASSWORD='...'
 ```
+
+Il campo `tls` accetta solo questi valori, e ne basta uno per scegliere il
+comportamento giusto — non serve indovinare la combinazione porta/TLS:
+
+- `ssl` — TLS implicito (di norma porta **465**, il caso di Aruba/Gmail).
+- `starttls` — TLS negoziato (di norma porta **587**).
+- `none` (o `plain`) — **niente cifratura**: server SMTP locale, MailHog,
+  relay in rete fidata. È il caso in cui *non* si vuole STARTTLS.
+- `auto` — sceglie `ssl` sulla 465, `starttls` altrimenti. È il default se
+  ometti `tls`.
+
+Un valore diverso da questi non viene ignorato in silenzio: la run stampa
+`campo 'tls' non riconosciuto: '...' (valori validi: ...)` e `doctor` esce con
+`[FAIL] notifier smtp`, cosi' l'errore si vede prima del primo invio e non
+dopo.
 
 ### Filtro
 

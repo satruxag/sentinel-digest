@@ -11,7 +11,7 @@ from pathlib import Path
 from . import __version__
 from .engine import ConfigNotFound, load_config, run
 from .filtering import KeywordFilter
-from .notify import check_notifier
+from .notify import build_notifier, check_notifier, describe_failure
 from .sources import build_source
 from .storage import Store
 
@@ -97,9 +97,16 @@ def cmd_doctor(args) -> int:
 
     for ncfg in config.get("notify") or []:
         kind = ncfg.get("kind")
-        # check_notifier convalida davvero la voce; prima un kind scritto male
-        # passava come [OK] e falliva solo alla run.
+        # check_notifier convalida i campi obbligatori; build_notifier prova a
+        # COSTRUIRE il notifier, perche' un valore sintatticamente valido ma non
+        # riconosciuto (es. `tls: require_tls`) passava come [OK] e falliva solo
+        # alla run. La diagnosi deve accorgersene qui.
         problema = check_notifier(ncfg)
+        if not problema:
+            try:
+                build_notifier(ncfg)
+            except Exception as exc:  # noqa: BLE001
+                problema = describe_failure(exc)
         if problema:
             print(f"[FAIL] notifier {kind}: {problema}")
             problems += 1
