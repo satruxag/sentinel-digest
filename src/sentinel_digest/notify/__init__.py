@@ -138,15 +138,36 @@ class WebhookNotifier(Notifier):
         self.user_agent = cfg.get("user_agent", "SentinelDigest/0.1")
 
     def _chunks(self, text: str) -> list[str]:
-        if len(text) <= self.max_len:
+        """Spezza il digest in blocchi che rispettano `max_len`.
+
+        Non basta tagliare sulle righe: un URL di bando con parametri di
+        tracciamento (le PA ne usano spesso di centinaia di caratteri) e' UNA
+        riga sola, piu' lunga del limite. Tagliando solo sui newline quel
+        blocco superava `max_len` (misurato: digest da 721 char, `max_len=100`
+        -> un chunk da 446) e Telegram rispondeva `message is too long`
+        facendo fallire la notifica. Inoltre il taglio ingenuo emetteva un
+        PRIMO chunk vuoto, inviato a vuoto. Qui: righe intere finche'
+        entrano, poi spezzatura forzata di quel che resta, senza mai emettere
+        blocchi vuoti ne' superare il limite.
+        """
+        if self.max_len <= 0:
             return [text]
-        out, cur = [], ""
+        out: list[str] = []
+        cur = ""
         for line in text.splitlines(True):
+            # Una riga singola che da sola sfonda il limite: prima si svuota
+            # l'accumulatore, poi la si spezza in blocchi della dimensione giusta.
+            while len(line) > self.max_len:
+                if cur:
+                    out.append(cur)
+                    cur = ""
+                out.append(line[: self.max_len])
+                line = line[self.max_len :]
             if len(cur) + len(line) > self.max_len:
                 out.append(cur)
                 cur = ""
             cur += line
-        if cur:
+        if cur or not out:
             out.append(cur)
         return out
 

@@ -125,3 +125,49 @@ def test_render_html_html_struttura_e_stato_vuoto():
     assert "https://x.test" in out
     empty = render_html([], "p", T0)
     assert "Nessuna nuova segnalazione" in empty
+
+
+# --- notify: spezzatura del digest per i canali con limite di lunghezza ------
+# Telegram rifiuta i messaggi oltre ~4096 char con "message is too long": se il
+# digest non viene spezzato la notifica fallisce in silenzio per l'utente.
+
+from sentinel_digest.notify import WebhookNotifier
+
+
+def _chunker(max_len):
+    return WebhookNotifier(
+        {"url": "http://127.0.0.1:1/hook", "format": "telegram", "chat_id": "1", "max_len": max_len}
+    )
+
+
+def test_chunks_riga_lunga_viene_spezzata_e_non_supera_il_limite():
+    """Un URL di bando con parametri e' UNA riga piu' lunga del limite."""
+    n = _chunker(100)
+    url_lungo = "https://pa.example.it/bando?id=" + "A" * 400
+    chunks = n._chunks(url_lungo)
+    assert all(len(c) <= 100 for c in chunks), f"chunk oltre max_len: {[len(c) for c in chunks]}"
+    assert all(chunks), "nessun chunk vuoto da inviare"
+    assert "".join(chunks) == url_lungo, "la spezzatura non deve perdere caratteri"
+
+
+def test_chunks_nessun_blocco_vuoto_in_testa_quando_la_prima_riga_sfonda():
+    n = _chunker(100)
+    chunks = n._chunks("X" * 250)
+    assert chunks[0] != "", "il taglio ingenuo emetteva un primo chunk vuoto"
+
+
+def test_chunks_spezzatura_reale_del_digest():
+    """Caso misurato: digest reale con URL lungo, max_len=100."""
+    long_url = "https://www.example-pa.it/bandi/avviso?id=" + "A" * 400
+    it = Item(source="Comune", title="Bando " + "x" * 120, url=long_url)
+    m = Match(item=it, score=1, hits=["bando"])
+    txt = render_text([m], "p", T0)
+    chunks = _chunker(100)._chunks(txt)
+    assert all(len(c) <= 100 for c in chunks), "un chunk supera il limite -> Telegram rifiuta"
+    assert all(chunks), "nessun chunk vuoto"
+    assert "".join(chunks) == txt, "il digest riconcatenato deve essere identico"
+
+
+def test_chunks_testo_corto_resta_una_sola_parte():
+    n = _chunker(3900)
+    assert n._chunks("riga breve") == ["riga breve"]
