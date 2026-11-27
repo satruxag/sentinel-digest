@@ -494,3 +494,51 @@ def test_doctor_accetta_i_notifier_sani(tmp_path, capsys):
     out = capsys.readouterr().out
     assert rc == 0, f"nessuna di queste voci e' rotta: {out}"
     assert "TUTTO OK" in out
+
+
+# --- load_config: config in YAML senza PyYAML -------------------------------
+
+def test_load_config_yaml_senza_pyyaml_da_errore_leggibile(tmp_path, monkeypatch):
+    """Chi installa `.[dev]` (niente PyYAML) e punta al .yaml di esempio non deve
+    ricevere un traceback JSONDecodeError: il messaggio deve nominare PyYAML e
+    indicare il comando per rimediare."""
+    import builtins
+
+    from sentinel_digest.engine import ConfigNotFound, load_config
+
+    real_import = builtins.__import__
+
+    def fake_import(name, *a, **k):
+        if name == "yaml":
+            raise ImportError("No module named 'yaml'")
+        return real_import(name, *a, **k)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    cfg_file = tmp_path / "config.yaml"
+    cfg_file.write_text("profile: bandi-pmi\nsources: []\n", encoding="utf-8")
+    with pytest.raises(ConfigNotFound) as e:
+        load_config(cfg_file)
+    msg = str(e.value)
+    assert "PyYAML" in msg, msg
+    assert "yaml" in msg.lower(), msg
+
+
+def test_load_config_json_senza_pyyaml_funziona(tmp_path, monkeypatch):
+    """Controprova: senza PyYAML una config JSON resta pienamente leggibile."""
+    import builtins
+    import json
+
+    from sentinel_digest.engine import load_config
+
+    real_import = builtins.__import__
+
+    def fake_import(name, *a, **k):
+        if name == "yaml":
+            raise ImportError("No module named 'yaml'")
+        return real_import(name, *a, **k)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+    cfg_file = tmp_path / "config.json"
+    cfg_file.write_text(json.dumps({"profile": "x", "sources": []}), encoding="utf-8")
+    cfg = load_config(cfg_file)
+    assert cfg["profile"] == "x"

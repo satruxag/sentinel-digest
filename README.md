@@ -245,9 +245,20 @@ print(res.errors)         # cosa è andato storto, senza eccezioni
 ## Test
 
 ```bash
-pip install ".[dev]"
+pip install ".[dev]"      # pytest + ruff
 pytest -q
 ```
+
+`.[dev]` installa solo gli strumenti di test/lint: **non** include `PyYAML`,
+quindi la CLI resta senza supporto YAML. Per usare la CLI dopo i test:
+
+```bash
+pip install ".[dev,yaml]"   # oppure ".[yaml]"
+```
+
+Senza PyYAML la config puo' essere solo JSON: se punti a un `.yaml`, la CLI lo
+dice esplicitamente (`la config ... sembra YAML, ma PyYAML non e' installato`)
+e ti indica il rimedio, invece di fallire con un traceback JSON.
 
 ## Licenza
 

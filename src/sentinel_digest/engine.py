@@ -61,8 +61,35 @@ def load_config(path: str | Path) -> dict:
     except ImportError:
         import json
 
-        data = json.loads(text)
+        # Senza PyYAML si legge solo JSON. Un file YAML letto come JSON muore
+        # con "JSONDecodeError: Expecting value: line 1 column 1" — un traceback
+        # che non nomina ne' PyYAML ne' il comando da eseguire: capitava a chi
+        # installa con `.[dev]` (che NON include l'extra yaml) e poi segue il
+        # README, che usa il .yaml di esempio. Qui si riconosce il caso e si
+        # dice cosa fare.
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as exc:
+            if _looks_like_yaml(text):
+                raise ConfigNotFound(
+                    f"la config {p} sembra YAML, ma PyYAML non e' installato\n"
+                    f"  (senza PyYAML la config puo' essere solo JSON).\n"
+                    f"  Rimedio:  pip install \"sentinel-digest[yaml]\"\n"
+                    f"  oppure scrivi la config in JSON e passa quel file con -c"
+                ) from exc
+            raise ConfigNotFound(
+                f"la config {p} non e' ne' YAML valido ne' JSON valido: {exc}"
+            ) from exc
     return expand_env(data)
+
+
+def _looks_like_yaml(text: str) -> bool:
+    """Euristica: chiave a inizio riga seguita da ':' (YAML non e' JSON)."""
+    import re
+
+    if text.lstrip().startswith(("{", "[")):
+        return False
+    return bool(re.search(r"^[A-Za-z_][\w-]*\s*:", text, re.MULTILINE))
 
 
 def collect(config: dict) -> tuple[list[Item], list[str]]:
